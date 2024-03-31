@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"> </script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-vis@latest"> </script>
+    <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
+</head>
+
+<body>
+    <script>
+        async function main() {
+            const dataToTensors = async (data) => {
+                const rawDataArr = await data.toArray();
+                const inputRawValue = rawDataArr.map(value => [
+                    value.female_gender_percentage,
+                    value.pub_day_of_week,
+                    value.pub_hour,
+                    value.program_sub_count,
+                    value.episode_seq,
+                    value.top_location
+                ]);
+                const outputRawValue = rawDataArr.map(value => value.play_count);
+
+                const inputTensor = tf.tensor2d(inputRawValue);
+                const outputTensor = tf.tensor2d(outputRawValue, [outputRawValue.length, 1]);
+
+                return {
+                    input: inputTensor,
+                    output: outputTensor,
+                }
+            }
+            const renderAllData = async (data) => {
+                const rawDataArr = await data.toArray();
+                const independentColumnArr = [
+                    'pub_day_of_week',
+                    'pub_hour',
+                    'program_sub_count',
+                    'episode_seq',
+                    'female_gender_percentage',
+                    'top_location'
+                ];
+                for (let i = 0; i < independentColumnArr.length; i++) {
+                    const volumnName = independentColumnArr[i];
+                    const values = rawDataArr.map(value => {
+                        return {
+                            x: value[volumnName],
+                            y: value.play_count,
+                        }
+                    });
+                    tfvis.render.scatterplot(
+                        { name: `play_count vs ${volumnName}`, tab: 'Visualize Data' },
+                        { values },
+                        {
+                            xLabel: independentColumnArr[i],
+                            yLabel: 'play_count',
+                            height: 300
+                        }
+                    );
+                }
+            }
+            const normalizedData = async (data) => {
+                const dataArr = await data.toArray();
+                const normalziedColumnArr = [
+                    'pub_day_of_week',
+                    'pub_hour',
+                    'program_sub_count',
+                    'episode_seq',
+                    'female_gender_percentage',
+                    'top_location',
+                    'play_count'
+                ];
+                normalziedColumnArr.forEach(columnName => {
+                    const columnValues = dataArr.map(value => value[columnName]);
+                    const maxValue = _.max(columnValues);
+                    const minValue = _.min(columnValues);
+                    dataArr.forEach(value => {
+                        value[columnName] = (value[columnName] - minValue) / (maxValue - minValue);
+                    });
+                })
+                return dataArr;
+            }
+
+            let data = tf.data.csv('data.csv');
+            await renderAllData(data);
+            let normalizedDataArr = await normalizedData(data);
+
+            data = tf.data.array(normalizedDataArr);
+            const dataLength = normalizedDataArr.length;
+            const shuffledData = data.shuffle(dataLength);
+
+            const traningDataLength = Math.floor(dataLength * 0.7);
+            const trainingData = shuffledData.take(traningDataLength);
+            const testingData = shuffledData.skip(traningDataLength);
+
+            const model = tf.sequential();
+
+            const hiddenLayer = tf.layers.dense({
+                units: 4,
+                inputShape: [6],
+                activation: 'sigmoid'
+            });
+            const outputLayer = tf.layers.dense({
+                units: 1,
+                activation: 'sigmoid'
+            });
+
+            model.add(hiddenLayer);
+            model.add(outputLayer);
+
+            const adamOpt = tf.train.adam(0.1);
+            model.compile({
+                optimizer: adamOpt,
+                loss: tf.losses.meanSquaredError,
+                metrics: ['accuracy']
+            })
+            const container = {
+                name: 'Model Training',
+                tab: 'Training'
+            };
+            const {
+                input: trainingInput,
+                output: trainingOutput
+            } = await dataToTensors(trainingData);
+            const {
+                input: testingInput,
+                output: testingOutput
+            } = await dataToTensors(testingData);
+            const config = {
+                shuffle: true,
+                epochs: 10,
+                batchSize: 32,
+                callbacks: tfvis.show.fitCallbacks(container, ['loss', 'val_loss', 'acc', 'val_acc']),
+                validationData: [testingInput, testingOutput],
+            }
+            const response = await model.fit(trainingInput, trainingOutput, config);
+        }
+        main();
+    </script>
+</body>
+
+</html>
