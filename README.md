@@ -1,3 +1,5 @@
+[Article for this project](https://www.v2think.com/using-tensorflowjs-to-build-a-prediction-model)
+
 ## How to run this training:
 
 ### If you are using NodeJS
